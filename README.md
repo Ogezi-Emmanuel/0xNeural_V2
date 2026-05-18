@@ -192,4 +192,4 @@ This project is licensed under the **MIT License**.
 
 ---
 
-**Maintainer:** [Ogezi Emmanuel]
+**Maintainer:** Emmanuel Ogezi
