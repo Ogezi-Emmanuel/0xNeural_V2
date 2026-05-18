@@ -2,14 +2,19 @@ import os
 import json
 import torch
 import re
+from pathlib import Path
 from sentence_transformers import SentenceTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
 
-# Resolve paths relative to where the script is located
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(SCRIPT_DIR, "../audit_reports") # Where you drop new PDFs/JSONs
-OUTPUT_DIR = os.path.join(SCRIPT_DIR, "../data")       # Where the brain lives
+# --- 0. PATH RESOLUTION (OS-AGNOSTIC) ---
+SCRIPT_DIR = Path(__file__).parent.resolve()
+BASE_DIR = SCRIPT_DIR.parent.resolve()
+
+# Configuration paths
+DATA_DIR = BASE_DIR / "audit_reports" # Where you drop new PDFs/JSONs
+OUTPUT_DIR = BASE_DIR / "data"       # Where the brain lives
+CACHE_DIR = BASE_DIR / "cache"
 
 # Ensure directories exist
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -114,8 +119,7 @@ print("\n✅ Database update complete! You can now restart your app.py server to
 import shutil
 
 # 5. Invalidate the Engine Cache
-cache_dir = os.path.join(SCRIPT_DIR, "../cache")
-if os.path.exists(cache_dir):
+if os.path.exists(CACHE_DIR):
     print("🧹 Wiping stale cache to ensure new signatures are applied...")
-    shutil.rmtree(cache_dir)
-    os.makedirs(cache_dir, exist_ok=True)
+    shutil.rmtree(CACHE_DIR)
+    os.makedirs(CACHE_DIR, exist_ok=True)

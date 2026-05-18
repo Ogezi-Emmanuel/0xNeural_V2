@@ -4,18 +4,28 @@ import json
 import re
 import torch.nn.functional as F
 import hashlib
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 import google.generativeai as genai
 from dotenv import load_dotenv
 
+# --- 0. PATH RESOLUTION (OS-AGNOSTIC) ---
+SCRIPT_DIR = Path(__file__).parent.resolve()
+BASE_DIR = SCRIPT_DIR.parent.resolve()
+
+# Configuration paths
+ENV_PATH = BASE_DIR / ".env"
+CACHE_DIR = BASE_DIR / "cache"
+METADATA_PATH = BASE_DIR / "data" / "0xneural_metadata.json"
+VECTOR_DB_PATH = BASE_DIR / "data" / "0xneural_vector_db.pt"
+
 # Load secret keys from .env
-load_dotenv()
+load_dotenv(dotenv_path=ENV_PATH)
 
 app = FastAPI(title="0xNeural V2 Command Center")
 
-CACHE_DIR = "cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 print("🔌 Booting 0xNeural Backend...")
@@ -34,13 +44,13 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f"🧠 Loading Vector Database on {device}...")
 
 try:
-    with open('data/0xneural_metadata.json', 'r', encoding='utf-8') as f:
+    with open(METADATA_PATH, 'r', encoding='utf-8') as f:
         historical_hacks = json.load(f)
-    db_embeddings = torch.load('data/0xneural_vector_db.pt', map_location=device)
+    db_embeddings = torch.load(VECTOR_DB_PATH, map_location=device)
     embedding_model = SentenceTransformer('BAAI/bge-small-en-v1.5').to(device)
     print(f"✅ Brain Loaded: {len(historical_hacks)} vectors active.")
 except Exception as e:
-    print(f"⚠️ Warning: Brain files not found in data/ folder. Error: {e}")
+    print(f"⚠️ Warning: Brain files not found in {METADATA_PATH.parent}. Error: {e}")
     historical_hacks = []
     db_embeddings = None
 
@@ -162,9 +172,9 @@ def reload_brain():
     """Forces the API to re-read the database from the hard drive."""
     global db_embeddings, historical_hacks
     try:
-        with open('data/0xneural_metadata.json', 'r', encoding='utf-8') as f:
+        with open(METADATA_PATH, 'r', encoding='utf-8') as f:
             historical_hacks = json.load(f)
-        db_embeddings = torch.load('data/0xneural_vector_db.pt', map_location=device)
+        db_embeddings = torch.load(VECTOR_DB_PATH, map_location=device)
         return {"status": "success", "message": f"Brain reloaded. {len(historical_hacks)} vectors active."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to reload brain: {e}")

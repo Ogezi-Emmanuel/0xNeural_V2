@@ -2,11 +2,15 @@
 import time
 import os
 import requests
+from pathlib import Path
 
-# --- CONFIG ---
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-QUEUE_FILE = os.path.join(SCRIPT_DIR, "target_queue.txt")
-SEEN_FILE = os.path.join(SCRIPT_DIR, "seen_verified.txt")
+# --- 0. PATH RESOLUTION (OS-AGNOSTIC) ---
+SCRIPT_DIR = Path(__file__).parent.resolve()
+BASE_DIR = SCRIPT_DIR.parent.resolve()
+
+# Configuration paths
+QUEUE_FILE = BASE_DIR / "target_queue.txt"
+SEEN_FILE = BASE_DIR / "seen_verified.txt"
 
 def load_seen():
     """Loads previously seen addresses to avoid duplicates."""

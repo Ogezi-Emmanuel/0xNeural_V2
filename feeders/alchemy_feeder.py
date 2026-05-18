@@ -1,14 +1,23 @@
 # alchemy_feeder.py
 import time
 import os
+from pathlib import Path
 from web3 import Web3
 from web3.exceptions import Web3Exception
 from dotenv import load_dotenv
 
-load_dotenv()
+# --- 0. PATH RESOLUTION (OS-AGNOSTIC) ---
+SCRIPT_DIR = Path(__file__).parent.resolve()
+BASE_DIR = SCRIPT_DIR.parent.resolve()
+
+# Configuration paths
+ENV_PATH = BASE_DIR / ".env"
+QUEUE_FILE = BASE_DIR / "target_queue.txt"
+
+# Load secret keys from .env
+load_dotenv(dotenv_path=ENV_PATH)
 
 ALCHEMY_WSS_URL = os.getenv("ALCHEMY_WSS_URL")
-QUEUE_FILE = "target_queue.txt"
 
 # Ensure queue file exists
 if not os.path.exists(QUEUE_FILE):

@@ -1,11 +1,15 @@
 # csv_feeder.py
 import csv
 import os
+from pathlib import Path
 
-# Bulletproof pathing
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CSV_FILE = os.path.join(SCRIPT_DIR, "export.csv")
-QUEUE_FILE = os.path.join(SCRIPT_DIR, "target_queue.txt")
+# --- 0. PATH RESOLUTION (OS-AGNOSTIC) ---
+SCRIPT_DIR = Path(__file__).parent.resolve()
+BASE_DIR = SCRIPT_DIR.parent.resolve()
+
+# Configuration paths
+CSV_FILE = BASE_DIR / "export.csv"
+QUEUE_FILE = BASE_DIR / "target_queue.txt"
 
 def load_csv_to_queue():
     if not os.path.exists(CSV_FILE):

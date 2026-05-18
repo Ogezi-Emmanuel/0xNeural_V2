@@ -4,12 +4,18 @@ import time
 import re
 import requests
 import json
+from pathlib import Path
 from web3 import Web3
 from dotenv import load_dotenv
 
-# --- CONFIG & ENV ---
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-ENV_PATH = os.path.join(SCRIPT_DIR, ".env")
+# --- 0. PATH RESOLUTION (OS-AGNOSTIC) ---
+SCRIPT_DIR = Path(__file__).parent.resolve()
+BASE_DIR = SCRIPT_DIR.parent.resolve()
+
+# Configuration paths
+ENV_PATH = BASE_DIR / ".env"
+
+# Load secret keys from .env
 load_dotenv(dotenv_path=ENV_PATH)
 
 ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY")

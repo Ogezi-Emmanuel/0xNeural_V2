@@ -3,6 +3,7 @@ import time
 import os
 import json
 import requests
+from pathlib import Path
 
 # Import all the heavy lifting from our new utils file
 from hunter_utils import (
@@ -10,14 +11,16 @@ from hunter_utils import (
     resolve_ens_name, search_github_for_address, send_discord_alert
 )
 
-# --- CONFIG ---
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# --- 0. PATH RESOLUTION (OS-AGNOSTIC) ---
+SCRIPT_DIR = Path(__file__).parent.resolve()
+BASE_DIR = SCRIPT_DIR.parent.resolve()
+
 LOCAL_API_URL = "http://127.0.0.1:8000/scan"
 
-QUEUE_FILE = os.path.join(SCRIPT_DIR, "target_queue.txt")
-WAITING_ROOM_FILE = os.path.join(SCRIPT_DIR, "waiting_room.json")
-REPORTS_DIR = os.path.join(SCRIPT_DIR, "reports")
-LOGS_DIR = os.path.join(SCRIPT_DIR, "logs")
+QUEUE_FILE = BASE_DIR / "target_queue.txt"
+WAITING_ROOM_FILE = BASE_DIR / "waiting_room.json"
+REPORTS_DIR = BASE_DIR / "reports"
+LOGS_DIR = BASE_DIR / "logs"
 
 os.makedirs(REPORTS_DIR, exist_ok=True)
 os.makedirs(LOGS_DIR, exist_ok=True)
@@ -89,7 +92,7 @@ def scan_address(address, force=False):
     
     if is_unknown_identity and has_no_repo:
         print(f"   [BLOCKED] 🗑️ Dropping {address} (No Identity + No Repo = No Bounty).")
-        with open(os.path.join(LOGS_DIR, "dropped_scams.txt"), "a") as f:
+        with open(LOGS_DIR / "dropped_scams.txt", "a") as f:
             f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {address} (Low Signal)\n")
         return "DONE" 
 
@@ -108,7 +111,7 @@ def scan_address(address, force=False):
 
             # 5. Payout / Reporting
             print(f"🎯 VULNERABILITY FOUND! Saving report...")
-            filename = os.path.join(REPORTS_DIR, f"VULN_{address}.md")
+            filename = REPORTS_DIR / f"VULN_{address}.md"
             osint_data = (
                 f"\n\n## 🕵️ Automated OSINT Dossier\n"
                 f"- **Deployer Wallet:** `{creator_wallet}`\n"

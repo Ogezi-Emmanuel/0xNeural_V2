@@ -3,16 +3,21 @@ import os
 import json
 import torch
 import argparse
+from pathlib import Path
 from sentence_transformers import SentenceTransformer
 import shutil
 
-# 1. FIX PATHS to be robust no matter where you run the script from
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(SCRIPT_DIR, "../data")
-AUDIT_REPORTS_DIR = os.path.join(SCRIPT_DIR, "../audit_reports")
+# --- 0. PATH RESOLUTION (OS-AGNOSTIC) ---
+SCRIPT_DIR = Path(__file__).parent.resolve()
+BASE_DIR = SCRIPT_DIR.parent.resolve()
 
-METADATA_FILE = os.path.join(DATA_DIR, "0xneural_metadata.json")
-VECTOR_DB_FILE = os.path.join(DATA_DIR, "0xneural_vector_db.pt")
+# Configuration paths
+DATA_DIR = BASE_DIR / "data"
+AUDIT_REPORTS_DIR = BASE_DIR / "audit_reports"
+CACHE_DIR = BASE_DIR / "cache"
+
+METADATA_FILE = DATA_DIR / "0xneural_metadata.json"
+VECTOR_DB_FILE = DATA_DIR / "0xneural_vector_db.pt"
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(AUDIT_REPORTS_DIR, exist_ok=True)
@@ -22,7 +27,7 @@ def ingest(name, context):
     
     # --- ADD THIS: The Hard Drive Backup ---
     # Save a permanent copy to the vacuum folder so it survives database rebuilds
-    backup_filename = os.path.join(AUDIT_REPORTS_DIR, f"MANUAL_INGEST_{name.replace(' ', '_')}.json")
+    backup_filename = AUDIT_REPORTS_DIR / f"MANUAL_INGEST_{name.replace(' ', '_')}.json"
     with open(backup_filename, 'w', encoding='utf-8') as f:
         json.dump({"content": context}, f, indent=4)
     print(f"💾 Permanent backup saved to {backup_filename}")
@@ -60,11 +65,10 @@ def ingest(name, context):
         json.dump(metadata, f, indent=4)
     
     # 5. Invalidate the Engine Cache
-    cache_dir = os.path.join(SCRIPT_DIR, "../cache")
-    if os.path.exists(cache_dir):
+    if os.path.exists(CACHE_DIR):
         print("🧹 Wiping stale cache to ensure new signatures are applied...")
-        shutil.rmtree(cache_dir)
-        os.makedirs(cache_dir, exist_ok=True)
+        shutil.rmtree(CACHE_DIR)
+        os.makedirs(CACHE_DIR, exist_ok=True)
 
     print(f"✅ Successfully added '{name}'. Total brain size: {len(metadata)} entries.")
 
