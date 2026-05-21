@@ -31,6 +31,7 @@ reports/
 seen_verified.txt
 target_queue.txt
 waiting_room.json
+compile_portfolio.py
 
 # Vector DB (optional, usually kept if small, but often ignored if rebuilt from reports)
 # data/
