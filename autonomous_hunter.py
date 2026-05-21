@@ -5,15 +5,14 @@ import json
 import requests
 from pathlib import Path
 
-# Import all the heavy lifting from our new utils file
-from hunter_utils import (
-    fetch_source_code, triage_contract, get_contract_creator,
-    resolve_ens_name, search_github_for_address, send_discord_alert
+# --- PACKAGE-AWARE UTILITY IMPORTS ---
+from utils.hunter_utils import (
+    is_canonical_address, fetch_source_code, triage_contract_ast, triage_contract,
+    get_contract_creator, resolve_ens_name, search_github_for_address, send_discord_alert
 )
 
-# --- 0. PATH RESOLUTION (OS-AGNOSTIC) ---
-SCRIPT_DIR = Path(__file__).parent.resolve()
-BASE_DIR = SCRIPT_DIR.parent.resolve()
+# --- 0. PATH RESOLUTION (OS-AGNOSTIC ROOT CONTEXT) ---
+BASE_DIR = Path(__file__).parent.resolve()  # SCRIPT_DIR is already the project root folder
 
 LOCAL_API_URL = "http://127.0.0.1:8000/scan"
 
@@ -56,29 +55,41 @@ def get_target_from_queue():
     except Exception:
         return None
 
-
 # ==========================================
-# 🧠 CORE SCANNING LOGIC
+# 🧠 CORE SCANNING LOGIC (REFUGEE GATES EMBEDDED)
 # ==========================================
 def scan_address(address, force=False):
-    print(f"\n🔍 Hunting target: {address}...")
+    print(f"\n⚡ Ingesting target: {address}")
     
-    # 1. Fetch & Triage
-    source_code = fetch_source_code(address)
-    if not source_code:
-        print(f"   [SKIPPED] 🗑️ No code returned from Etherscan API. Dropping target.")
-        return "DONE" 
-
-    is_high_value = triage_contract(source_code)
-    if not is_high_value and not force:
-        print(f"⏭️ Skipped {address} - Standard code.")
+    # --- EDGE INTERCEPT 1: Canonical Token Whitelist Matrix ---
+    # Drops reentrancy alert matching queries if target points to a trusted token wrapper
+    if is_canonical_address(address):
+        print(f"🛡️ [WHITELIST-INTERCEPT] Skipping {address} - Verified immutable asset pool ledger.")
         return "DONE"
 
-    # 2. OSINT Bouncer
+    # --- INGESTION PHASE: Fetch Source Code Payload ---
+    source_code = fetch_source_code(address)
+    if not source_code:
+        print(f"❌ [FETCH-ERROR] Could not isolate source layout payload for {address}. Dropping target.")
+        return "DONE" 
+
+    # --- EDGE INTERCEPT 2: AST Gatekeeper Regex Triage Check ---
+    # Skips downstream operations if contract contains zero loop states or arbitrage callbacks
+    if not triage_contract_ast(source_code, force_bypass=force):
+        print(f"🗑️ [AST-FILTER-DROP] Dropping {address} - Invariant code clone detected (No loops/callbacks).")
+        return "DONE"
+
+    # --- HISTORICAL INVARIANT SCRIPT TRIAGE MATCHING ---
+    is_high_value = triage_contract(source_code)
+    if not is_high_value and not force:
+        print(f"⏭️ Skipped {address} - Baseline structural code invariants missing.")
+        return "DONE"
+
+    # --- OSINT BOUNCER CHECK WINDOWS ---
     print(f"🕵️ Running OSINT checks before Engine analysis...")
     creator_wallet, tx_hash = get_contract_creator(address)
     
-    # 🛑 KILL SWITCH 1: Factory Deployments (Uniswap Pairs, Proxies, etc.)
+    # KILL SWITCH 1: Factory Deployments / Broken Metadata
     if str(creator_wallet).lower() in ["none", "unknown", "", "null"]:
         print(f"   [BLOCKED] 🗑️ Dropping {address} (Factory Deployed / Infrastructure).")
         return "DONE"
@@ -86,7 +97,7 @@ def scan_address(address, force=False):
     ens_name = resolve_ens_name(creator_wallet) if creator_wallet else "Unknown"
     github_repo = search_github_for_address(address)
     
-    # 🛑 KILL SWITCH 2: The "High-Signal" Filter
+    # KILL SWITCH 2: Unknown Identity + Missing Repository Code Asset Matches
     is_unknown_identity = ("Anonymous Wallet" in ens_name or "Unknown" in ens_name)
     has_no_repo = ("No public repo found" in github_repo or "Failed" in github_repo)
     
@@ -96,21 +107,21 @@ def scan_address(address, force=False):
             f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {address} (Low Signal)\n")
         return "DONE" 
 
-    # 3. Ask the LLM Engine
-    print(f"   [APPROVED] 🚀 Sending to 0xNeural Engine...")
+    # --- INFERENCE ENGINE ROUTING LAYER ---
+    print(f"🎯 [HIGH-SIGNAL] Approved! Passing {address} to 0xNeural V2 Core Scanning Core...")
     try:
         response = requests.post(LOCAL_API_URL, json={"source_code": source_code}, timeout=120)
         
         if response.status_code == 200:
             report = response.json().get('report', '')
             
-            # 4. Severity Filter
+            # Severity False Positive Filter Checks
             if "High Value Logic: False" in report:
-                print(f"   [TRASHED] 📉 Engine found only QA/Low-Severity noise.")
+                print(f"   [TRASHED] 📉 Engine found only QA/Low-Severity configuration noise.")
                 return "DONE"
 
-            # 5. Payout / Reporting
-            print(f"🎯 VULNERABILITY FOUND! Saving report...")
+            # Valid Target Isolation: Save and Dispatch Alerts
+            print(f"🎯 VULNERABILITY FOUND! Compiling localized advisory report...")
             filename = REPORTS_DIR / f"VULN_{address}.md"
             osint_data = (
                 f"\n\n## 🕵️ Automated OSINT Dossier\n"
@@ -130,17 +141,16 @@ def scan_address(address, force=False):
             return "DONE"
             
         elif response.status_code == 500:
-            print(f"   ⚠️ [API LIMIT] Engine returned HTTP 500. Gemini quota reached.")
+            print(f"   ⚠️ [API LIMIT] Engine returned HTTP 500. Gemini quota limit threshold reached.")
             return "RATE_LIMIT"
             
         else:
-            print(f"❌ Engine error: {response.status_code}")
+            print(f"❌ Engine error code returned: {response.status_code}")
             return "DONE"
             
     except requests.exceptions.ConnectionError:
-        print("❌ Error: Cannot connect to Engine. Is app.py running?")
+        print("❌ System Error: Cannot resolve backend connection. Verify that app.py uvicorn server is active.")
         return "DONE"
-
 
 # ==========================================
 # 📥 QUEUE MANAGEMENT
@@ -149,7 +159,6 @@ def run_queue_mode():
     print(f"🦇 Queue Mode Active. Watching '{QUEUE_FILE}'...")
     if not os.path.exists(QUEUE_FILE): open(QUEUE_FILE, 'w').close()
 
-    # Waiting Room is now exclusively for Gemini 500 Rate Limits
     MAX_RETRIES = 12 
     last_retry_time = 0
     RETRY_INTERVAL = 300 
@@ -174,17 +183,17 @@ def run_queue_mode():
 
             current_time = time.time()
             if pending_retries and (current_time - last_retry_time > RETRY_INTERVAL):
-                print(f"\n🔄 Checking {len(pending_retries)} rate-limited targets in the Waiting Room...")
+                print(f"\n🔄 Checking {len(pending_retries)} rate-limited targets inside the Waiting Room...")
                 
                 for addr in list(pending_retries.keys()):
                     status = scan_address(addr)
                     
                     if status == "RATE_LIMIT":
-                        print(f"   [WAITING] ⏳ API still limited. Retry {pending_retries[addr] + 1}/{MAX_RETRIES}")
+                        print(f"   [WAITING] ⏳ API quota limit still active. Retry index: {pending_retries[addr] + 1}/{MAX_RETRIES}")
                         pending_retries[addr] += 1
                         
                         if pending_retries[addr] >= MAX_RETRIES:
-                            print(f"   [TIMEOUT] 🗑️ Dropping {addr} - Exceeded waiting limit.")
+                            print(f"   [TIMEOUT] 🗑️ Purging {addr} from state tracker - Exceeded retry limit boundaries.")
                             del pending_retries[addr]
                     else:
                         del pending_retries[addr]
@@ -195,10 +204,10 @@ def run_queue_mode():
                 last_retry_time = time.time()
 
         except KeyboardInterrupt:
-            print("\n👋 Stopping Hunter.")
+            print("\n👋 Halting Hunter execution loop.")
             break
         except Exception as e:
-            print(f"❌ Error in queue loop: {e}")
+            print(f"❌ Ingestion loop fault: {e}")
             time.sleep(10)
 
 if __name__ == "__main__":

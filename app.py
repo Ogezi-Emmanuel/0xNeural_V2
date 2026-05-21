@@ -1,3 +1,4 @@
+# app.py
 import os
 import torch
 import json
@@ -11,11 +12,11 @@ from sentence_transformers import SentenceTransformer
 import google.generativeai as genai
 from dotenv import load_dotenv
 
-# --- 0. PATH RESOLUTION (OS-AGNOSTIC) ---
-SCRIPT_DIR = Path(__file__).parent.resolve()
-BASE_DIR = SCRIPT_DIR.parent.resolve()
+from utils.hunter_utils import triage_contract_ast
 
-# Configuration paths
+# --- 0. PATH RESOLUTION (OS-AGNOSTIC ROOT CONTEXT) ---
+BASE_DIR = Path(__file__).parent.resolve()  # SITTING DIRECTLY AT ROOT
+
 ENV_PATH = BASE_DIR / ".env"
 CACHE_DIR = BASE_DIR / "cache"
 METADATA_PATH = BASE_DIR / "data" / "0xneural_metadata.json"
@@ -123,13 +124,21 @@ def scan_contract(request: ScanRequest):
         "- Gas optimizations.\n"
         "- Single-step ownership transfers (e.g., standard Ownable/OwnableUpgradeable implementations).\n"
         "- Centralization risks where an Admin must make a mistake for the bug to occur.\n"
-        "- Standard OpenZeppelin ERC4626 findings related to `DECIMALS_OFFSET` loss-shifting or empty vault inflation attacks. (These are known design trade-offs).\n\n"
+        "- Standard OpenZeppelin ERC4626 findings related to `DECIMALS_OFFSET` loss-shifting or empty vault inflation attacks. (These are known design trade-offs).\n"
+        "- Swallowed revert reasons, missing error strings, or opaque transaction failures. These are strictly Informational/QA.\n\n"
         "If the ONLY findings in a contract are Low/QA/Informational, you must treat the contract as CLEAN and output 'High Value Logic: False'. Do not generate a vulnerability report for QA noise.\n\n"
         "ANALYSIS PROCESS (Chain of Thought):\n"
         "1. Identify the core logic flow of the target code.\n"
-        "2. Centralization risks and Privileged Roles. (e.g., 'Admin can rug pull', 'Owner can mint infinite tokens', 'Keeper executes arbitrary calldata'). Bug bounties require an EXTERNAL, UNPRIVILEGED attacker to exploit the code. If the exploit requires compromising an Owner, Admin, Keeper, or Whitelisted address to execute, DROP IT immediately."
+        "2. Centralization risks and Privileged Roles. (e.g., 'Admin can rug pull', 'Owner can mint infinite tokens', 'Keeper executes arbitrary calldata'). Bug bounties require an EXTERNAL, UNPRIVILEGED attacker to exploit the code. If the exploit requires compromising an Owner, Admin, Keeper, or Whitelisted address to execute, DROP IT immediately.\n"
         "3. Look for matching High/Critical logical patterns.\n"
-        "4. Determine if the target code contains a highly exploitable vulnerability described in a reference.\n\n"
+        "4. Standard Proxy Templates. Do NOT flag OpenZeppelin ERC1967Proxy, TransparentUpgradeableProxy, or UUPS contracts for 'uninitialized proxy' or 'front-running initialization' risks. You are auditing the generic template, not the on-chain deployment state. Assume the deployer initialized it correctly. ONLY flag vulnerabilities in custom IMPLEMENTATION logic. \n"
+        "5. Mathematical & Economic Reality. In Solidity ^0.8.0, arithmetic operations revert on overflow/underflow unless explicitly wrapped in an `unchecked {}` block. Do not flag standard addition/subtraction as wrap-around exploits unless you can mathematically prove an attacker can realistically supply enough tokens (e.g., >10^50) to hit type(uint256).max. For precision loss, if multiplication occurs before division on heavily scaled numbers (e.g., 1e18), truncation to zero is economically impossible. Do not flag it.\n"
+        "6. Pull-Based Oracles. If a function accepts price_data, updateData, or payload as bytes calldata and passes it to an external Oracle contract, assume it is a Pull-Based Oracle (e.g., Pyth, RedStone). Do not flag this as arbitrary user-data injection unless you can mathematically prove the Oracle implementation fails to verify the cryptographic signature.\n"
+        "7. Outflow Caps vs DoS. When analyzing variables named capacity, limit, or quota related to withdrawals or borrowing, do not flag missing replenishments on successful execution (e.g., withdraw, borrow, solve). Assume these are Outflow Caps designed to strictly limit volume over time. Only expect replenishments on cancellations or reversals.\n"
+        "8. Known Issues & Dev Notes. Do not flag vulnerabilities that are explicitly acknowledged as accepted risks or user errors in the contract's NatSpec or `// dev` comments. (e.g., leaving residual funds on a stateless adapter due to a user not using type(uint256).max is an accepted risk, not a bug).\n"
+        "9. Partial Fills. In P2P lending or order-book contracts, if a `borrow` or `activate` function overrides a requested amount with the actual funded amount (e.g., `totalSupply`), this is standard 'Partial Fill' logic. Do not flag this as a malicious unilateral parameter modification.\n"
+        "10. Yul Assembly Validation. Strictly validate any inline assembly (Yul) claims against EVM opcode argument requirements before flagging syntax errors in deployed mainnet bytecode. (e.g., `returndatacopy` strictly requires 3 arguments).\n"
+        "11. Determine if the target code contains a highly exploitable vulnerability described in a reference.\n\n"
         "STRICT OUTPUT FORMAT:\n"
         "If a HIGH/CRITICAL vulnerability is found:\n"
         "   High Value Logic: True\n"
@@ -140,8 +149,7 @@ def scan_contract(request: ScanRequest):
         "If no vulnerability matches the references, or only low/informational issues exist:\n"
         "   High Value Logic: False\n"
         "   NO VULNERABILITY FOUND\n"
-        "5. Standard Proxy Templates. Do NOT flag OpenZeppelin ERC1967Proxy, TransparentUpgradeableProxy, or UUPS contracts for 'uninitialized proxy' or 'front-running initialization' risks. You are auditing the generic template, not the on-chain deployment state. Assume the deployer initialized it correctly. ONLY flag vulnerabilities in custom IMPLEMENTATION logic. \n"
-        "6. Standard Proxy Templates. Do NOT flag OpenZeppelin Proxy contracts (ERC1967, Transparent, UUPS) for structural design choices like 'uninitialized proxy', 'front-running initialization', or 'lack of contract existence check on delegatecall' (silent selfdestruct failures). You are auditing the generic template, not the implementation. ONLY flag vulnerabilities in custom IMPLEMENTATION logic. \n"
+        "Rule: Do not flag msg.sender.transfer() or msg.sender.send() as vulnerable to reentrancy. These methods forward a 2300 gas stipend, making state-modifying reentrancy impossible. Only flag CEI violations as reentrancy if the interaction uses .call. \n"
     )
 
     prompt = f"{system_instruction}\n\nHISTORICAL SECURITY REFERENCE DATA:\n{retrieved_context_payload}\n\nTARGET SOURCE CODE TO BE SCANNED:\n{safe_code}\n\nTask: Perform a deep logical analysis."

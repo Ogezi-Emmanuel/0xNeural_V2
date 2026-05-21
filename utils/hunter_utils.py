@@ -1,4 +1,4 @@
-# hunter_utils.py
+# utils/hunter_utils.py
 import os
 import time
 import re
@@ -8,12 +8,13 @@ from pathlib import Path
 from web3 import Web3
 from dotenv import load_dotenv
 
-# --- 0. PATH RESOLUTION (OS-AGNOSTIC) ---
-SCRIPT_DIR = Path(__file__).parent.resolve()
-BASE_DIR = SCRIPT_DIR.parent.resolve()
+# --- 0. PATH RESOLUTION (OS-AGNOSTIC & PACKAGE-AWARE) ---
+UTILS_DIR = Path(__file__).parent.resolve()
+BASE_DIR = UTILS_DIR.parent.resolve()  # Stepping one folder up from utils/ to Root
 
-# Configuration paths
+# Dynamic project assets
 ENV_PATH = BASE_DIR / ".env"
+CONSTANTS_PATH = UTILS_DIR / "constants.json"  # Inside the same utils folder
 
 # Load secret keys from .env
 load_dotenv(dotenv_path=ENV_PATH)
@@ -30,6 +31,49 @@ if ALCHEMY_WSS_URL:
         w3 = Web3(Web3.LegacyWebSocketProvider(ALCHEMY_WSS_URL))
     except Exception as e:
         print(f"⚠️ Could not connect Web3 for OSINT: {e}")
+
+# ==========================================
+# 🛡️ PIPELINE GATEKEEPER LAYER
+# ==========================================
+def is_canonical_address(address: str) -> bool:
+    """
+    Checks if an interacting contract destination matches a high-volume verified token asset pool ledger.
+    Exempts standard canonical token wrappers to minimize alert fatigue from identical state changes.
+    """
+    if not os.path.exists(CONSTANTS_PATH):
+        return False
+    try:
+        with open(CONSTANTS_PATH, 'r') as f:
+            constants = json.load(f)
+        whitelist = constants.get("CANONICAL_WHITELIST", {})
+        # Force strict lowercase matching to avoid address string formatting inconsistencies
+        return address.lower() in [addr.lower() for addr in whitelist]
+    except Exception as e:
+        print(f"⚠️ Ingestion Warning: Error reading constants whitelist configuration matrix: {e}")
+        return False
+
+def triage_contract_ast(source_code: str, force_bypass: bool = False) -> bool:
+    """
+    AST Gatekeeper: Performs regex token syntax analysis over incoming raw contract strings.
+    Drops execution frames immediately if critical loop components or arbitrage callback gates are missing.
+    """
+    if force_bypass:
+        return True
+        
+    # Architectural keywords mapping complex execution or multi-contract interaction nodes
+    complexity_keywords = [
+        r"\bfor\b", 
+        r"\bwhile\b", 
+        r"\bexecuteOperation\b", 
+        r"\bonFlashLoan\b"
+    ]
+    
+    # Evaluate code logic lanes for signature regex pattern matching
+    for pattern in complexity_keywords:
+        if re.search(pattern, source_code):
+            return True
+            
+    return False
 
 # ==========================================
 # 🕵️ OSINT FUNCTIONS
@@ -114,7 +158,7 @@ def triage_contract(source_code):
 def send_discord_alert(address, report_summary, osint_raw_text=""):
     if not DISCORD_WEBHOOK_URL: return
     vuln_text = "See local report for details."
-    match = re.search(r'\[VULNERABILITY\]:\s*(.*?)(?=\[EXPLOIT PATH\]|\[REMEDIATION\]|$)', report_summary, re.DOTALL)
+    match = re.search(r'\\[VULNERABILITY\\]:\\s*(.*?)(?=\\[EXPLOIT PATH\\]|\\[REMEDIATION\\]|$)', report_summary, re.DOTALL)
     if match:
         vuln_text = match.group(1).strip()
         if len(vuln_text) > 1000: vuln_text = vuln_text[:1000] + "..."
