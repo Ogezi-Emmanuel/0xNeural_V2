@@ -8,6 +8,9 @@
 
 **0xNeural V2** is a professional-grade, autonomous smart contract security auditing pipeline. It combines local **Retrieval-Augmented Generation (RAG)** using high-dimensional vector embeddings with advanced LLM reasoning to identify High and Critical severity logic flaws in real-time.
 
+<img width="2816" height="1536" alt="Gemini_Generated_Image_xh2i4bxh2i4bxh2i" src="https://github.com/user-attachments/assets/096809f6-c028-488e-8068-7ca5b6192caf" />
+
+
 By bridging the gap between historical exploit data and real-time on-chain activity, 0xNeural V2 acts as an automated "hunter" that scouts the Ethereum network for vulnerable targets, performs automated OSINT, and generates structured security reports.
 
 ---
